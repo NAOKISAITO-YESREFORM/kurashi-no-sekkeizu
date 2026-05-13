@@ -32,11 +32,21 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v1.0
+// 本番デプロイ版 v2.0 - Formspree統合済み
+
+// ★★★ Formspree フォームID をここに貼り付けてください ★★★
+// 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/xzdowrgg";
 
 export default function ReformHearingSheet() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({
+    // お客様情報(URLパラメータから自動取得)
+    contact_name: "",
+    contact_email: "",
+    contact_phone: "",
+    inquiry_id: "",
+    // ヒアリング項目
     places: [],
     goal: null,
     goal_other_text: "",
@@ -50,6 +60,27 @@ export default function ReformHearingSheet() {
     message: "",
     images: [],
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  // URLパラメータからお客様情報を読み込み(初回のみ)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get("name") || "";
+    const email = params.get("email") || "";
+    const phone = params.get("phone") || "";
+    const id = params.get("id") || "";
+    if (name || email || phone || id) {
+      setAnswers((prev) => ({
+        ...prev,
+        contact_name: name,
+        contact_email: email,
+        contact_phone: phone,
+        inquiry_id: id,
+      }));
+    }
+  }, []);
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -817,6 +848,63 @@ export default function ReformHearingSheet() {
     );
   }
 
+  // Formspree送信
+  const submitToFormspree = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+
+    // 整形した送信データ
+    const familyParts = [];
+    if (isResidential(answers.places)) {
+      if (answers.adults > 0) familyParts.push(`大人 ${answers.adults}人`);
+      if (answers.children > 0) {
+        const ages = (answers.child_ages || []).map((a) => `${a}歳`).join("・");
+        familyParts.push(`子供 ${answers.children}人 (${ages})`);
+      }
+      if (answers.pets?.trim()) familyParts.push(`ペット: ${answers.pets}`);
+    }
+    const familyText = familyParts.join(" / ") || "—";
+
+    const payload = {
+      _subject: `[暮らしの設計図] 新規回答 - ${answers.contact_name || "お客様"}様`,
+      お客様名: answers.contact_name || "(未入力)",
+      メールアドレス: answers.contact_email || "(未入力)",
+      電話番号: answers.contact_phone || "(未入力)",
+      お問い合わせID: answers.inquiry_id || "(なし)",
+      リフォーム場所: (answers.places || []).join("、"),
+      改修目標: answers.goal || "—",
+      デザインテイスト: answers.style || "—",
+      ご予算: answers.budget || "—",
+      竣工タイミング: answers.timing || "—",
+      ご家族構成: familyText,
+      ご要望メッセージ: answers.message || "(なし)",
+      参考イメージ:
+        (answers.images || []).length > 0
+          ? `${answers.images.length}件 (${answers.images.map((i) => i.name).join("、")})`
+          : "なし",
+    };
+
+    try {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setStep(sentStep);
+      } else {
+        setSubmitError("送信エラーが発生しました。お手数ですがお電話でお問い合わせください。");
+      }
+    } catch (e) {
+      setSubmitError("通信エラーが発生しました。電波の良い場所で再度お試しください。");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // 確認画面
   if (step === summaryStep) {
     const placesText = (answers.places || []).join("、") || "—";
@@ -854,6 +942,46 @@ export default function ReformHearingSheet() {
           <h2 style={{ fontFamily: fontSerif, fontSize: 24, fontWeight: 400, lineHeight: 1.6, margin: 0, letterSpacing: "0.04em" }}>ご回答内容の<br />ご確認</h2>
         </div>
 
+        {/* お客様情報セクション(URLパラメータから自動入力 / 編集可) */}
+        <div style={{ background: palette.paper, border: `1px solid ${palette.line}`, padding: "22px 20px", marginBottom: 18 }}>
+          <div style={{ fontFamily: fontSerif, fontSize: 11, letterSpacing: "0.3em", color: palette.accent, marginBottom: 14, textAlign: "center" }}>
+            ご連絡先
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>お名前 <span style={{ color: palette.accent }}>*</span></div>
+              <input
+                type="text"
+                value={answers.contact_name}
+                onChange={(e) => setAnswers({ ...answers, contact_name: e.target.value })}
+                placeholder="山田 太郎"
+                style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>メールアドレス <span style={{ color: palette.accent }}>*</span></div>
+              <input
+                type="email"
+                value={answers.contact_email}
+                onChange={(e) => setAnswers({ ...answers, contact_email: e.target.value })}
+                placeholder="yamada@example.com"
+                style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>お電話番号</div>
+              <input
+                type="tel"
+                value={answers.contact_phone}
+                onChange={(e) => setAnswers({ ...answers, contact_phone: e.target.value })}
+                placeholder="090-1234-5678"
+                style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ヒアリング内容セクション */}
         <div style={{ background: palette.paper, border: `1px solid ${palette.line}`, padding: "22px 20px", marginBottom: 28 }}>
           {rows.map((row, idx) => {
             const Icon = row.Icon;
@@ -873,13 +1001,36 @@ export default function ReformHearingSheet() {
           })}
         </div>
 
-        <button onClick={() => setStep(sentStep)} style={{ width: "100%", background: palette.ink, color: palette.paper, border: "none", padding: "22px", fontFamily: fontSerif, fontSize: 14, letterSpacing: "0.25em", cursor: "pointer", transition: "all 0.3s", borderRadius: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = palette.accent)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = palette.ink)}>
-          この内容で送信する
+        {submitError && (
+          <div style={{ background: "#FBE9E7", border: "1px solid #D84315", color: "#BF360C", padding: "12px 16px", marginBottom: 16, fontSize: 12, lineHeight: 1.6 }}>
+            {submitError}
+          </div>
+        )}
+
+        <button
+          onClick={submitToFormspree}
+          disabled={submitting || !answers.contact_name.trim() || !answers.contact_email.trim()}
+          style={{
+            width: "100%",
+            background: submitting || !answers.contact_name.trim() || !answers.contact_email.trim() ? palette.line : palette.ink,
+            color: palette.paper,
+            border: "none",
+            padding: "22px",
+            fontFamily: fontSerif,
+            fontSize: 14,
+            letterSpacing: "0.25em",
+            cursor: submitting || !answers.contact_name.trim() || !answers.contact_email.trim() ? "not-allowed" : "pointer",
+            transition: "all 0.3s",
+            borderRadius: 0,
+            opacity: submitting || !answers.contact_name.trim() || !answers.contact_email.trim() ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => { if (!submitting && answers.contact_name.trim() && answers.contact_email.trim()) e.currentTarget.style.background = palette.accent; }}
+          onMouseLeave={(e) => { if (!submitting && answers.contact_name.trim() && answers.contact_email.trim()) e.currentTarget.style.background = palette.ink; }}
+        >
+          {submitting ? "送信中..." : (!answers.contact_name.trim() || !answers.contact_email.trim() ? "お名前とメールをご入力ください" : "この内容で送信する")}
         </button>
 
-        <button onClick={() => { setAnswers({ places: [], goal: null, goal_other_text: "", style: null, budget: null, timing: null, adults: 2, children: 0, child_ages: [], pets: "", message: "", images: [] }); setStep(0); }} style={{ marginTop: 20, width: "100%", background: "transparent", border: "none", color: palette.inkSoft, fontSize: 12, cursor: "pointer", letterSpacing: "0.15em", fontFamily: fontSerif }}>
+        <button onClick={() => { setAnswers({ contact_name: "", contact_email: "", contact_phone: "", inquiry_id: "", places: [], goal: null, goal_other_text: "", style: null, budget: null, timing: null, adults: 2, children: 0, child_ages: [], pets: "", message: "", images: [] }); setStep(0); }} style={{ marginTop: 20, width: "100%", background: "transparent", border: "none", color: palette.inkSoft, fontSize: 12, cursor: "pointer", letterSpacing: "0.15em", fontFamily: fontSerif }}>
           最初からやり直す
         </button>
       </Frame>
