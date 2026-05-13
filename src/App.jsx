@@ -32,11 +32,11 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.2 - デバッグ用エラー詳細表示版(原因特定後にv2.1に戻す)
+// 本番デプロイ版 v2.3 - Formspreeエンドポイント修正 + デバッグ用エラー詳細表示
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
-const FORMSPREE_ENDPOINT = "https://formspree.io/f/YOUR_FORM_ID";
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/xzdowrgg";
 
 
 // 日本語IME対応の入力コンポーネント
