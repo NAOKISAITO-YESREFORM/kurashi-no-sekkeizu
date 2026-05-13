@@ -32,11 +32,41 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.0 - Formspree統合済み
+// 本番デプロイ版 v2.1 - Formspree + URLパラメータ + 日本語IME修正
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
-const FORMSPREE_ENDPOINT = "https://formspree.io/f/xzdowrgg";
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/YOUR_FORM_ID";
+
+
+// 日本語IME対応の入力コンポーネント
+// 通常の controlled input は IME 変換中に value が割り込まれて文字が崩れるため、
+// composition イベントで変換確定まで親stateへの反映を遅らせる
+function JpInput({ multiline = false, value, onChange, ...rest }) {
+  const [composing, setComposing] = useState(false);
+  const [local, setLocal] = useState(value || "");
+  useEffect(() => {
+    if (!composing) setLocal(value || "");
+  }, [value, composing]);
+  const handleChange = (e) => {
+    setLocal(e.target.value);
+    if (!composing) onChange(e.target.value);
+  };
+  const handleCStart = () => setComposing(true);
+  const handleCEnd = (e) => {
+    setComposing(false);
+    setLocal(e.target.value);
+    onChange(e.target.value);
+  };
+  const props = {
+    ...rest,
+    value: local,
+    onChange: handleChange,
+    onCompositionStart: handleCStart,
+    onCompositionEnd: handleCEnd,
+  };
+  return multiline ? <textarea {...props} /> : <input {...props} />;
+}
 
 export default function ReformHearingSheet() {
   const [step, setStep] = useState(0);
@@ -522,9 +552,10 @@ export default function ReformHearingSheet() {
             {/* その他 選択時のテキスト入力 */}
             {answers.goal === "その他" && (
               <>
-                <textarea
+                <JpInput
+                  multiline
                   value={answers.goal_other_text}
-                  onChange={(e) => setAnswers({ ...answers, goal_other_text: e.target.value })}
+                  onChange={(v) => setAnswers({ ...answers, goal_other_text: v })}
                   placeholder="改修の目標を具体的にお書きください"
                   style={{
                     width: "100%", marginTop: 16, padding: "14px 16px",
@@ -731,10 +762,10 @@ export default function ReformHearingSheet() {
                     <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.1em" }}>Pets</div>
                   </div>
                 </div>
-                <input
+                <JpInput
                   type="text"
                   value={answers.pets || ""}
-                  onChange={(e) => setAnswers({ ...answers, pets: e.target.value })}
+                  onChange={(v) => setAnswers({ ...answers, pets: v })}
                   placeholder="例: 犬1匹、猫2匹  /  なし"
                   style={{
                     width: "100%", padding: "12px 14px",
@@ -756,9 +787,10 @@ export default function ReformHearingSheet() {
           <>
             <div style={{ position: "relative" }}>
               <MessageSquare size={16} color={palette.accent} strokeWidth={1.2} style={{ position: "absolute", top: 14, left: 14, zIndex: 1 }} />
-              <textarea
+              <JpInput
+                multiline
                 value={answers[q.key] || ""}
-                onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                onChange={(v) => setAnswers({ ...answers, [q.key]: v })}
                 placeholder={q.placeholder}
                 style={{
                   width: "100%", padding: "14px 16px 14px 40px",
@@ -950,30 +982,30 @@ export default function ReformHearingSheet() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>お名前 <span style={{ color: palette.accent }}>*</span></div>
-              <input
+              <JpInput
                 type="text"
                 value={answers.contact_name}
-                onChange={(e) => setAnswers({ ...answers, contact_name: e.target.value })}
+                onChange={(v) => setAnswers({ ...answers, contact_name: v })}
                 placeholder="山田 太郎"
                 style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
               />
             </div>
             <div>
               <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>メールアドレス <span style={{ color: palette.accent }}>*</span></div>
-              <input
+              <JpInput
                 type="email"
                 value={answers.contact_email}
-                onChange={(e) => setAnswers({ ...answers, contact_email: e.target.value })}
+                onChange={(v) => setAnswers({ ...answers, contact_email: v })}
                 placeholder="yamada@example.com"
                 style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
               />
             </div>
             <div>
               <div style={{ fontSize: 10, color: palette.inkSoft, fontFamily: fontSerif, letterSpacing: "0.2em", marginBottom: 4 }}>お電話番号</div>
-              <input
+              <JpInput
                 type="tel"
                 value={answers.contact_phone}
-                onChange={(e) => setAnswers({ ...answers, contact_phone: e.target.value })}
+                onChange={(v) => setAnswers({ ...answers, contact_phone: v })}
                 placeholder="090-1234-5678"
                 style={{ width: "100%", padding: "10px 12px", border: `1px solid ${palette.line}`, borderRadius: 0, fontFamily: fontSans, fontSize: 14, background: palette.bg, color: palette.ink, outline: "none", boxSizing: "border-box" }}
               />
