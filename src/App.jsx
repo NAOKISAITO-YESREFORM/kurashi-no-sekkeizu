@@ -32,12 +32,44 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.3 - Formspreeエンドポイント修正 + デバッグ用エラー詳細表示
+// 本番デプロイ版 v2.4 - URL暗号化(AES-256-CBC)対応
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
 const FORMSPREE_ENDPOINT = "https://formspree.io/f/xzdowrgg";
 
+
+
+// ============================================================
+// URL暗号化・復号 (Web Crypto API使用 / 追加ライブラリ不要)
+// WordPress側と同じ秘密キーで暗号化されたURLパラメータを復号する
+// ============================================================
+// ★★★ WordPress側と必ず同じ値にすること ★★★
+const URL_SECRET_KEY = "kurashi-yes-reform-2026-secure-v1";
+
+async function decryptUrlData(token, secret) {
+  try {
+    // URL-safe base64 → 標準base64
+    let b64 = token.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    // base64 デコード
+    const combined = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (combined.length < 17) return null;
+    const iv = combined.slice(0, 16);
+    const encrypted = combined.slice(16);
+    // 秘密キーから AES-256 キーを生成 (SHA-256)
+    const encoder = new TextEncoder();
+    const keyData = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
+    const key = await crypto.subtle.importKey("raw", keyData, { name: "AES-CBC" }, false, ["decrypt"]);
+    // 復号
+    const decryptedBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, key, encrypted);
+    const json = new TextDecoder().decode(decryptedBuf);
+    return JSON.parse(json);
+  } catch (e) {
+    console.warn("URL decryption failed:", e);
+    return null;
+  }
+}
 
 // 日本語IME対応の入力コンポーネント
 // 通常の controlled input は IME 変換中に value が割り込まれて文字が崩れるため、
@@ -94,9 +126,30 @@ export default function ReformHearingSheet() {
   const [submitError, setSubmitError] = useState(null);
 
   // URLパラメータからお客様情報を読み込み(初回のみ)
+  // 1) ?d=暗号化トークン  ← 本番運用ではこちらを使う(セキュア)
+  // 2) ?name=&email=&phone=&id=  ← 平文(テスト用フォールバック)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+
+    // ① 暗号化トークン優先
+    const token = params.get("d");
+    if (token) {
+      decryptUrlData(token, URL_SECRET_KEY).then((data) => {
+        if (data) {
+          setAnswers((prev) => ({
+            ...prev,
+            contact_name: data.name || "",
+            contact_email: data.email || "",
+            contact_phone: data.phone || "",
+            inquiry_id: data.id || "",
+          }));
+        }
+      });
+      return;
+    }
+
+    // ② 平文パラメータ(後方互換)
     const name = params.get("name") || "";
     const email = params.get("email") || "";
     const phone = params.get("phone") || "";
