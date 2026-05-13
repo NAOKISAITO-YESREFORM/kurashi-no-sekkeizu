@@ -32,7 +32,7 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.1 - Formspree + URLパラメータ + 日本語IME修正
+// 本番デプロイ版 v2.2 - デバッグ用エラー詳細表示版(原因特定後にv2.1に戻す)
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
@@ -928,10 +928,14 @@ export default function ReformHearingSheet() {
       if (res.ok) {
         setStep(sentStep);
       } else {
-        setSubmitError("送信エラーが発生しました。お手数ですがお電話でお問い合わせください。");
+        // 詳細エラー情報を表示(デバッグ用 / 本番公開前に元に戻す)
+        let body = "";
+        try { body = await res.text(); } catch (e) {}
+        setSubmitError(`送信エラー [HTTP ${res.status}]\n${body.substring(0, 400)}\n\n※デバッグ情報です。このスクリーンショットを開発者にお見せください。`);
       }
     } catch (e) {
-      setSubmitError("通信エラーが発生しました。電波の良い場所で再度お試しください。");
+      // 通信エラー詳細
+      setSubmitError(`通信エラー: ${e.name || "Unknown"}\nメッセージ: ${e.message || "詳細なし"}\n\n※デバッグ情報です。このスクリーンショットを開発者にお見せください。`);
     } finally {
       setSubmitting(false);
     }
@@ -1034,7 +1038,7 @@ export default function ReformHearingSheet() {
         </div>
 
         {submitError && (
-          <div style={{ background: "#FBE9E7", border: "1px solid #D84315", color: "#BF360C", padding: "12px 16px", marginBottom: 16, fontSize: 12, lineHeight: 1.6 }}>
+          <div style={{ background: "#FBE9E7", border: "1px solid #D84315", color: "#BF360C", padding: "12px 16px", marginBottom: 16, fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {submitError}
           </div>
         )}
