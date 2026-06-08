@@ -32,7 +32,7 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.5 - URL暗号化 + 画像ファイル添付対応
+// 本番デプロイ版 v2.6 - URL暗号化 + imgBB画像ホスティング + Formspree送信
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
@@ -46,6 +46,41 @@ const FORMSPREE_ENDPOINT = "https://formspree.io/f/xzdowrgg";
 // ============================================================
 // ★★★ WordPress側と必ず同じ値にすること ★★★
 const URL_SECRET_KEY = "kurashi-yes-reform-2026-secure-v1";
+
+// ============================================================
+// imgBB 画像ホスティング設定
+// ============================================================
+// 画像はFormspreeのプラン制限を回避するため imgBB に直接アップロードし、
+// メールにはURLのみを記載する。
+const IMGBB_API_KEY = "51dfc27c92f36240f4d9e84dff93d19c";
+const IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload";
+
+// 単一の画像ファイルを imgBB にアップロードし、表示用URLを返す
+async function uploadImageToImgbb(file) {
+  try {
+    const formData = new FormData();
+    formData.append("key", IMGBB_API_KEY);
+    formData.append("image", file);
+    if (file.name) formData.append("name", file.name);
+    const res = await fetch(IMGBB_UPLOAD_URL, { method: "POST", body: formData });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json && json.success && json.data) {
+      return {
+        url: json.data.url,
+        display_url: json.data.display_url || json.data.url,
+        thumb: json.data.thumb?.url || null,
+        delete_url: json.data.delete_url || null,
+      };
+    }
+    return null;
+  } catch (e) {
+    console.warn("imgBB upload failed:", e);
+    return null;
+  }
+}
+
+
 
 async function decryptUrlData(token, secret) {
   try {
@@ -933,7 +968,7 @@ export default function ReformHearingSheet() {
     );
   }
 
-  // Formspree送信 (画像添付対応 / multipart/form-data)
+  // Formspree送信 (imgBB事前アップロード + JSON送信)
   const submitToFormspree = async () => {
     setSubmitting(true);
     setSubmitError(null);
@@ -950,40 +985,51 @@ export default function ReformHearingSheet() {
     }
     const familyText = familyParts.join(" / ") || "—";
 
-    // FormData (画像ファイル添付に対応)
-    const fd = new FormData();
-    fd.append("_subject", `[暮らしの設計図] 新規回答 - ${answers.contact_name || "お客様"}様`);
-    fd.append("お客様名", answers.contact_name || "(未入力)");
-    fd.append("メールアドレス", answers.contact_email || "(未入力)");
-    fd.append("電話番号", answers.contact_phone || "(未入力)");
-    fd.append("お問い合わせID", answers.inquiry_id || "(なし)");
-    fd.append("リフォーム場所", (answers.places || []).join("、"));
-    fd.append("改修目標", answers.goal || "—");
-    fd.append("デザインテイスト", answers.style || "—");
-    fd.append("ご予算", answers.budget || "—");
-    fd.append("竣工タイミング", answers.timing || "—");
-    fd.append("ご家族構成", familyText);
-    fd.append("ご要望メッセージ", answers.message || "(なし)");
-
-    // 画像ファイルを実体として添付
+    // 画像があれば事前に imgBB にアップロード
     const imageList = answers.images || [];
+    let imageReport = "なし";
     if (imageList.length > 0) {
-      fd.append("参考イメージ", `${imageList.length}件添付 (${imageList.map((i) => i.name).join("、")})`);
-      imageList.forEach((img, idx) => {
+      const uploadResults = [];
+      for (let i = 0; i < imageList.length; i++) {
+        const img = imageList[i];
         const file = img.file || img;
         if (file instanceof File || file instanceof Blob) {
-          fd.append(`参考イメージ_${idx + 1}`, file, img.name || `image_${idx + 1}`);
+          const result = await uploadImageToImgbb(file);
+          if (result) {
+            uploadResults.push(`${i + 1}) ${img.name || `image_${i + 1}`}\n   ${result.display_url}`);
+          } else {
+            uploadResults.push(`${i + 1}) ${img.name || `image_${i + 1}`} (アップロード失敗)`);
+          }
         }
-      });
-    } else {
-      fd.append("参考イメージ", "なし");
+      }
+      imageReport = `${imageList.length}件\n\n${uploadResults.join("\n\n")}`;
     }
+
+    // Formspree への送信ペイロード
+    const payload = {
+      _subject: `[暮らしの設計図] 新規回答 - ${answers.contact_name || "お客様"}様`,
+      お客様名: answers.contact_name || "(未入力)",
+      メールアドレス: answers.contact_email || "(未入力)",
+      電話番号: answers.contact_phone || "(未入力)",
+      お問い合わせID: answers.inquiry_id || "(なし)",
+      リフォーム場所: (answers.places || []).join("、"),
+      改修目標: answers.goal || "—",
+      デザインテイスト: answers.style || "—",
+      ご予算: answers.budget || "—",
+      竣工タイミング: answers.timing || "—",
+      ご家族構成: familyText,
+      ご要望メッセージ: answers.message || "(なし)",
+      参考イメージ: imageReport,
+    };
 
     try {
       const res = await fetch(FORMSPREE_ENDPOINT, {
         method: "POST",
-        headers: { Accept: "application/json" },
-        body: fd,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         setStep(sentStep);
