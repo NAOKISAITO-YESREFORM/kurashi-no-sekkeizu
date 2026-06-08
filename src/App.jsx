@@ -32,7 +32,7 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v2.4 - URL暗号化(AES-256-CBC)対応
+// 本番デプロイ版 v2.5 - URL暗号化 + 画像ファイル添付対応
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
@@ -896,7 +896,7 @@ export default function ReformHearingSheet() {
                     const files = Array.from(e.target.files || []);
                     setAnswers({
                       ...answers,
-                      images: files.map((f) => ({ name: f.name, size: f.size })),
+                      images: files.map((f) => ({ name: f.name, size: f.size, file: f })),
                     });
                   }}
                 />
@@ -933,12 +933,12 @@ export default function ReformHearingSheet() {
     );
   }
 
-  // Formspree送信
+  // Formspree送信 (画像添付対応 / multipart/form-data)
   const submitToFormspree = async () => {
     setSubmitting(true);
     setSubmitError(null);
 
-    // 整形した送信データ
+    // 整形した家族構成テキスト
     const familyParts = [];
     if (isResidential(answers.places)) {
       if (answers.adults > 0) familyParts.push(`大人 ${answers.adults}人`);
@@ -950,45 +950,50 @@ export default function ReformHearingSheet() {
     }
     const familyText = familyParts.join(" / ") || "—";
 
-    const payload = {
-      _subject: `[暮らしの設計図] 新規回答 - ${answers.contact_name || "お客様"}様`,
-      お客様名: answers.contact_name || "(未入力)",
-      メールアドレス: answers.contact_email || "(未入力)",
-      電話番号: answers.contact_phone || "(未入力)",
-      お問い合わせID: answers.inquiry_id || "(なし)",
-      リフォーム場所: (answers.places || []).join("、"),
-      改修目標: answers.goal || "—",
-      デザインテイスト: answers.style || "—",
-      ご予算: answers.budget || "—",
-      竣工タイミング: answers.timing || "—",
-      ご家族構成: familyText,
-      ご要望メッセージ: answers.message || "(なし)",
-      参考イメージ:
-        (answers.images || []).length > 0
-          ? `${answers.images.length}件 (${answers.images.map((i) => i.name).join("、")})`
-          : "なし",
-    };
+    // FormData (画像ファイル添付に対応)
+    const fd = new FormData();
+    fd.append("_subject", `[暮らしの設計図] 新規回答 - ${answers.contact_name || "お客様"}様`);
+    fd.append("お客様名", answers.contact_name || "(未入力)");
+    fd.append("メールアドレス", answers.contact_email || "(未入力)");
+    fd.append("電話番号", answers.contact_phone || "(未入力)");
+    fd.append("お問い合わせID", answers.inquiry_id || "(なし)");
+    fd.append("リフォーム場所", (answers.places || []).join("、"));
+    fd.append("改修目標", answers.goal || "—");
+    fd.append("デザインテイスト", answers.style || "—");
+    fd.append("ご予算", answers.budget || "—");
+    fd.append("竣工タイミング", answers.timing || "—");
+    fd.append("ご家族構成", familyText);
+    fd.append("ご要望メッセージ", answers.message || "(なし)");
+
+    // 画像ファイルを実体として添付
+    const imageList = answers.images || [];
+    if (imageList.length > 0) {
+      fd.append("参考イメージ", `${imageList.length}件添付 (${imageList.map((i) => i.name).join("、")})`);
+      imageList.forEach((img, idx) => {
+        const file = img.file || img;
+        if (file instanceof File || file instanceof Blob) {
+          fd.append(`参考イメージ_${idx + 1}`, file, img.name || `image_${idx + 1}`);
+        }
+      });
+    } else {
+      fd.append("参考イメージ", "なし");
+    }
 
     try {
       const res = await fetch(FORMSPREE_ENDPOINT, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { Accept: "application/json" },
+        body: fd,
       });
       if (res.ok) {
         setStep(sentStep);
       } else {
-        // 詳細エラー情報を表示(デバッグ用 / 本番公開前に元に戻す)
         let body = "";
         try { body = await res.text(); } catch (e) {}
-        setSubmitError(`送信エラー [HTTP ${res.status}]\n${body.substring(0, 400)}\n\n※デバッグ情報です。このスクリーンショットを開発者にお見せください。`);
+        setSubmitError(`送信エラー [HTTP ${res.status}]\n${body.substring(0, 400)}\n\n※このスクリーンショットを開発者にお見せください。`);
       }
     } catch (e) {
-      // 通信エラー詳細
-      setSubmitError(`通信エラー: ${e.name || "Unknown"}\nメッセージ: ${e.message || "詳細なし"}\n\n※デバッグ情報です。このスクリーンショットを開発者にお見せください。`);
+      setSubmitError(`通信エラー: ${e.name || "Unknown"}\nメッセージ: ${e.message || "詳細なし"}\n\n※このスクリーンショットを開発者にお見せください。`);
     } finally {
       setSubmitting(false);
     }
