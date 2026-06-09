@@ -32,7 +32,7 @@ const IMG_MINIMAL = "/minimal.jpg";
 
 
 // 暮らしの設計図 (Yes Reform Hearing Sheet)
-// 本番デプロイ版 v3.0 - 本番リリース版(暗号化URL + 画像ホスティング + シンプルエラー表示)
+// 本番デプロイ版 v3.1 - フォーカス外れバグ修正(コンポーネント定義をモジュールレベルへ移動)
 
 // ★★★ Formspree フォームID をここに貼り付けてください ★★★
 // 例: const FORMSPREE_ENDPOINT = "https://formspree.io/f/xyzabcde";
@@ -135,6 +135,147 @@ function JpInput({ multiline = false, value, onChange, ...rest }) {
   return multiline ? <textarea {...props} /> : <input {...props} />;
 }
 
+
+// ============================================================
+// モジュールレベルの定数・コンポーネント
+// ★重要★ コンポーネントを親関数内で定義すると毎レンダリングで
+// 新しい関数参照になり、子の <input> がアンマウント→再マウントされて
+// フォーカスが外れる。必ずモジュールレベル(関数の外)で定義する。
+// ============================================================
+
+const palette = {
+  bg: "#F5F1EA",
+  bgDeep: "#EBE5D9",
+  ink: "#1F1B16",
+  inkSoft: "#5A5247",
+  accent: "#8B5A3C",
+  line: "#C9BFAE",
+  paper: "#FFFCF6",
+};
+
+const fontSerif = '"Noto Serif JP", "Hiragino Mincho ProN", serif';
+const fontSans = '"Noto Sans JP", "Hiragino Sans", sans-serif';
+
+// トイレアイコン
+const ToiletIcon = ({ size = 20, color = "currentColor", strokeWidth = 1.2 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 3h10v5H7z" />
+    <path d="M5 8h14l-2 9H7L5 8z" />
+    <path d="M9 17v3h6v-3" />
+  </svg>
+);
+
+// ステッパー (+/- 数値入力)
+const Stepper = ({ value, onChange, min = 0, max = 10, suffix = "人" }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+    <button
+      onClick={() => onChange(Math.max(min, value - 1))}
+      style={{
+        width: 36, height: 36,
+        borderRadius: "50%",
+        background: palette.paper,
+        border: `1px solid ${palette.line}`,
+        cursor: value <= min ? "not-allowed" : "pointer",
+        opacity: value <= min ? 0.4 : 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <Minus size={14} color={palette.ink} strokeWidth={1.5} />
+    </button>
+    <div style={{
+      minWidth: 60, textAlign: "center",
+      fontFamily: fontSerif, fontSize: 18, fontWeight: 400,
+      letterSpacing: "0.05em",
+    }}>
+      {value}{suffix}
+    </div>
+    <button
+      onClick={() => onChange(Math.min(max, value + 1))}
+      style={{
+        width: 36, height: 36,
+        borderRadius: "50%",
+        background: palette.ink, color: palette.paper,
+        border: "none",
+        cursor: value >= max ? "not-allowed" : "pointer",
+        opacity: value >= max ? 0.4 : 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <Plus size={14} color={palette.paper} strokeWidth={1.5} />
+    </button>
+  </div>
+);
+
+// 次へボタン
+const NextButton = ({ onClick, disabled, label = "次へ進む" }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    style={{
+      marginTop: 28,
+      width: "100%",
+      background: disabled ? palette.line : palette.ink,
+      color: palette.paper,
+      border: "none",
+      padding: "20px",
+      fontFamily: fontSerif,
+      fontSize: 14,
+      letterSpacing: "0.25em",
+      cursor: disabled ? "not-allowed" : "pointer",
+      transition: "all 0.3s",
+      borderRadius: 0,
+      opacity: disabled ? 0.6 : 1,
+    }}
+    onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = palette.accent; }}
+    onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.background = palette.ink; }}
+  >
+    {label} &nbsp;→
+  </button>
+);
+
+// フレーム(全画面共通の枠)
+const Frame = ({ children }) => (
+  <div style={{ minHeight: "100vh", background: `radial-gradient(ellipse at top, ${palette.bg} 0%, ${palette.bgDeep} 100%)`, fontFamily: fontSans, color: palette.ink, position: "relative", overflow: "hidden" }}>
+    <div style={{ position: "absolute", top: 24, left: 24, right: 24, height: 1, background: palette.line, opacity: 0.5 }} />
+    <div style={{ position: "absolute", bottom: 24, left: 24, right: 24, height: 1, background: palette.line, opacity: 0.5 }} />
+    <div
+      style={{
+        position: "absolute",
+        top: 32,
+        left: "50%",
+        transform: "translateX(-50%)",
+        textAlign: "center",
+        width: "100%",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: fontSerif,
+          fontSize: 16,
+          fontWeight: 500,
+          letterSpacing: "0.25em",
+          color: palette.ink,
+          marginBottom: 4,
+        }}
+      >
+        暮らしの設計図
+      </div>
+      <div
+        style={{
+          fontFamily: fontSerif,
+          fontSize: 9,
+          letterSpacing: "0.4em",
+          color: palette.inkSoft,
+          opacity: 0.85,
+        }}
+      >
+        YES REFORM
+      </div>
+    </div>
+    <div style={{ padding: "100px 24px 60px", maxWidth: 460, margin: "0 auto" }}>{children}</div>
+  </div>
+);
+
 export default function ReformHearingSheet() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({
@@ -208,28 +349,6 @@ export default function ReformHearingSheet() {
     document.head.appendChild(link);
     return () => document.head.removeChild(link);
   }, []);
-
-  const palette = {
-    bg: "#F5F1EA",
-    bgDeep: "#EBE5D9",
-    ink: "#1F1B16",
-    inkSoft: "#5A5247",
-    accent: "#8B5A3C",
-    line: "#C9BFAE",
-    paper: "#FFFCF6",
-  };
-
-  const fontSerif = '"Noto Serif JP", "Hiragino Mincho ProN", serif';
-  const fontSans = '"Noto Sans JP", "Hiragino Sans", sans-serif';
-
-  // トイレアイコン
-  const ToiletIcon = ({ size = 20, color = "currentColor", strokeWidth = 1.2 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 3h10v5H7z" />
-      <path d="M5 8h14l-2 9H7L5 8z" />
-      <path d="M9 17v3h6v-3" />
-    </svg>
-  );
 
   // ========== 質問データ ==========
 
@@ -401,117 +520,6 @@ export default function ReformHearingSheet() {
   };
 
   // ========== 共通コンポーネント ==========
-
-  // ステッパー(+/- 数値入力)
-  const Stepper = ({ value, onChange, min = 0, max = 10, suffix = "人" }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-      <button
-        onClick={() => onChange(Math.max(min, value - 1))}
-        style={{
-          width: 36, height: 36,
-          borderRadius: "50%",
-          background: palette.paper,
-          border: `1px solid ${palette.line}`,
-          cursor: value <= min ? "not-allowed" : "pointer",
-          opacity: value <= min ? 0.4 : 1,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        <Minus size={14} color={palette.ink} strokeWidth={1.5} />
-      </button>
-      <div style={{
-        minWidth: 60, textAlign: "center",
-        fontFamily: fontSerif, fontSize: 18, fontWeight: 400,
-        letterSpacing: "0.05em",
-      }}>
-        {value}{suffix}
-      </div>
-      <button
-        onClick={() => onChange(Math.min(max, value + 1))}
-        style={{
-          width: 36, height: 36,
-          borderRadius: "50%",
-          background: palette.ink, color: palette.paper,
-          border: "none",
-          cursor: value >= max ? "not-allowed" : "pointer",
-          opacity: value >= max ? 0.4 : 1,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        <Plus size={14} color={palette.paper} strokeWidth={1.5} />
-      </button>
-    </div>
-  );
-
-  // 次へボタン
-  const NextButton = ({ onClick, disabled, label = "次へ進む" }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        marginTop: 28,
-        width: "100%",
-        background: disabled ? palette.line : palette.ink,
-        color: palette.paper,
-        border: "none",
-        padding: "20px",
-        fontFamily: fontSerif,
-        fontSize: 14,
-        letterSpacing: "0.25em",
-        cursor: disabled ? "not-allowed" : "pointer",
-        transition: "all 0.3s",
-        borderRadius: 0,
-        opacity: disabled ? 0.6 : 1,
-      }}
-      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = palette.accent; }}
-      onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.background = palette.ink; }}
-    >
-      {label} &nbsp;→
-    </button>
-  );
-
-  // ---------- フレーム ----------
-  const Frame = ({ children }) => (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(ellipse at top, ${palette.bg} 0%, ${palette.bgDeep} 100%)`, fontFamily: fontSans, color: palette.ink, position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 24, left: 24, right: 24, height: 1, background: palette.line, opacity: 0.5 }} />
-      <div style={{ position: "absolute", bottom: 24, left: 24, right: 24, height: 1, background: palette.line, opacity: 0.5 }} />
-      <div
-        style={{
-          position: "absolute",
-          top: 32,
-          left: "50%",
-          transform: "translateX(-50%)",
-          textAlign: "center",
-          width: "100%",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: fontSerif,
-            fontSize: 16,
-            fontWeight: 500,
-            letterSpacing: "0.25em",
-            color: palette.ink,
-            marginBottom: 4,
-          }}
-        >
-          暮らしの設計図
-        </div>
-        <div
-          style={{
-            fontFamily: fontSerif,
-            fontSize: 9,
-            letterSpacing: "0.4em",
-            color: palette.inkSoft,
-            opacity: 0.85,
-          }}
-        >
-          YES REFORM
-        </div>
-      </div>
-      <div style={{ padding: "100px 24px 60px", maxWidth: 460, margin: "0 auto" }}>{children}</div>
-    </div>
-  );
 
   // ウェルカム
   if (step === 0) {
